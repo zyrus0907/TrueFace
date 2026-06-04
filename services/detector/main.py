@@ -12,14 +12,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# If this model fails to download, swap it for:
-#   "dima806/ai_vs_real_image_detection"
-AI_MODEL = "Organika/sdxl-detector"
+AI_MODEL = "dima806/ai_vs_real_image_detection"
 _classifier = None
 
 
 def get_classifier():
-    """Load the AI-image classifier once, lazily (first request only)."""
     global _classifier
     if _classifier is None:
         from transformers import pipeline
@@ -38,7 +35,6 @@ def error_level_analysis(img: Image.Image, quality: int = 90) -> float:
 
 
 def ai_generation_suspicion(img: Image.Image):
-    """Return (suspicion 0-1, note) or (None, reason) if unavailable."""
     keywords = ("ai", "artificial", "fake", "generated", "synthetic", "sdxl")
     try:
         clf = get_classifier()
@@ -61,46 +57,52 @@ async def analyze(file: UploadFile = File(...)):
     raw = await file.read()
     img = Image.open(io.BytesIO(raw))
 
-    signals = []
     exif = img.getexif()
-
     software = exif.get(305)
-    signals.append({
-        "name": "editing_software_tag",
-        "detail": f"Metadata names software: {software}" if software
-                  else "No editing-software tag in metadata.",
-        "suspicion": 0.6 if software else 0.1,
-    })
-
     has_exif = len(exif) > 0
-    signals.append({
-        "name": "metadata_present",
-        "detail": "Camera metadata present." if has_exif
-                  else "Metadata stripped (common after editing or screenshots).",
-        "suspicion": 0.1 if has_exif else 0.4,
-    })
-
     ela_max = error_level_analysis(img)
-    signals.append({
-        "name": "error_level_analysis",
-        "detail": f"Max recompression difference: {ela_max:.0f}/255.",
-        "suspicion": round(min(ela_max / 255.0, 1.0), 2),
-    })
 
+    # Trustworthy forensic signals — these alone determine the score.
+    forensic = [
+        {
+            "name": "editing_software_tag",
+            "detail": f"Metadata names software: {software}" if software
+                      else "No editing-software tag in metadata.",
+            "suspicion": 0.6 if software else 0.1,
+        },
+        {
+            "name": "metadata_present",
+            "detail": "Camera metadata present." if has_exif
+                      else "Metadata stripped (common after editing or screenshots).",
+            "suspicion": 0.1 if has_exif else 0.4,
+        },
+        {
+            "name": "error_level_analysis",
+            "detail": f"Max recompression difference: {ela_max:.0f}/255.",
+            "suspicion": round(min(ela_max / 255.0, 1.0), 2),
+        },
+    ]
+
+    avg = sum(s["suspicion"] for s in forensic) / len(forensic)
+    authenticity_score = round((1 - avg) * 100)
+
+    signals = list(forensic)
+
+    # Experimental AI signal: shown for transparency, NOT counted in the score,
+    # because open AI-image detectors false-positive heavily on real photos.
     ai_susp, note = ai_generation_suspicion(img)
     if ai_susp is not None:
         signals.append({
             "name": "ai_generated_likelihood",
-            "detail": f"AI-image classifier confidence: {ai_susp * 100:.0f}% ({note}).",
+            "detail": f"Classifier says {ai_susp * 100:.0f}% ({note}). Experimental and "
+                      "often wrong on real photos — not counted toward the score.",
             "suspicion": round(ai_susp, 2),
+            "experimental": True,
         })
-
-    avg_suspicion = sum(s["suspicion"] for s in signals) / len(signals)
-    authenticity_score = round((1 - avg_suspicion) * 100)
 
     return {
         "authenticity_score": authenticity_score,
         "signals": signals,
-        "disclaimer": "Heuristic + ML estimate, not a definitive verdict. "
+        "disclaimer": "Heuristic estimate, not a definitive verdict. "
                       "Can produce false positives; do not treat as proof.",
     }

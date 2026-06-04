@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
-const DETECTOR_URL = 'http://localhost:8000'
+const DETECTOR_URL = process.env.NEXT_PUBLIC_DETECTOR_URL ?? 'http://localhost:8000'
 
-type Signal = { name: string; detail: string; suspicion: number }
+type Signal = { name: string; detail: string; suspicion: number; experimental?: boolean }
 type Result = { authenticity_score: number; signals: Signal[]; disclaimer: string }
 
 function verdict(score: number) {
@@ -21,7 +21,10 @@ function signalColor(s: number) {
 }
 
 function prettyName(name: string) {
-  return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  return name
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace(/\bAi\b/g, 'AI')
 }
 
 export default function UploadForm() {
@@ -57,9 +60,7 @@ export default function UploadForm() {
     const ext = file.name.split('.').pop()
     const path = `${user.id}/${crypto.randomUUID()}.${ext}`
 
-    const { error: uploadError } = await supabase.storage
-      .from('uploads')
-      .upload(path, file)
+    const { error: uploadError } = await supabase.storage.from('uploads').upload(path, file)
     if (uploadError) {
       setStatus(`Upload failed: ${uploadError.message}`)
       setBusy(false)
@@ -171,16 +172,24 @@ export default function UploadForm() {
           <div className="space-y-3">
             {result.signals.map((s) => (
               <div key={s.name} className="space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">{prettyName(s.name)}</span>
-                  <span className="text-zinc-500">
-                    {Math.round(s.suspicion * 100)}% suspicion
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    {prettyName(s.name)}
+                    {s.experimental && (
+                      <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-zinc-500 dark:bg-zinc-800">
+                        experimental
+                      </span>
+                    )}
                   </span>
+                  <span className="text-zinc-500">{Math.round(s.suspicion * 100)}%</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                   <div
                     className="h-full rounded-full"
-                    style={{ width: `${s.suspicion * 100}%`, background: signalColor(s.suspicion) }}
+                    style={{
+                      width: `${s.suspicion * 100}%`,
+                      background: s.experimental ? '#a1a1aa' : signalColor(s.suspicion),
+                    }}
                   />
                 </div>
                 <p className="text-xs text-zinc-500">{s.detail}</p>
