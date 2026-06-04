@@ -8,11 +8,35 @@ const DETECTOR_URL = 'http://localhost:8000'
 type Signal = { name: string; detail: string; suspicion: number }
 type Result = { authenticity_score: number; signals: Signal[]; disclaimer: string }
 
+function verdict(score: number) {
+  if (score >= 75) return { label: 'Likely authentic', color: '#16a34a', track: '#bbf7d0' }
+  if (score >= 50) return { label: 'Some signs of editing', color: '#d97706', track: '#fde68a' }
+  return { label: 'Likely edited', color: '#dc2626', track: '#fecaca' }
+}
+
+function signalColor(s: number) {
+  if (s >= 0.5) return '#dc2626'
+  if (s >= 0.25) return '#d97706'
+  return '#16a34a'
+}
+
+function prettyName(name: string) {
+  return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 export default function UploadForm() {
   const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [result, setResult] = useState<Result | null>(null)
   const [busy, setBusy] = useState(false)
+
+  function onPick(f: File | null) {
+    setFile(f)
+    setResult(null)
+    setStatus(null)
+    setPreview(f ? URL.createObjectURL(f) : null)
+  }
 
   async function handleUpload() {
     if (!file) return
@@ -77,36 +101,96 @@ export default function UploadForm() {
       setStatus(`Analysis failed: ${msg}. Is the detector running on :8000?`)
     }
     setBusy(false)
-    setFile(null)
   }
 
+  const v = result ? verdict(result.authenticity_score) : null
+  const R = 54
+  const C = 2 * Math.PI * R
+
   return (
-    <div className="w-full max-w-md space-y-3">
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        className="w-full text-sm"
-      />
+    <div className="w-full max-w-md space-y-5">
+      <label className="flex aspect-video cursor-pointer items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50 transition hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900">
+        {preview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview} alt="preview" className="h-full w-full object-contain" />
+        ) : (
+          <div className="text-center text-sm text-zinc-500">
+            <p className="font-medium">Click to choose an image</p>
+            <p className="text-xs">JPG or PNG</p>
+          </div>
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+        />
+      </label>
+
       <button
         onClick={handleUpload}
         disabled={!file || busy}
-        className="w-full rounded bg-black px-3 py-2 text-white disabled:opacity-50"
+        className="w-full rounded-xl bg-black px-4 py-3 font-medium text-white transition hover:bg-zinc-800 disabled:opacity-40 dark:bg-white dark:text-black"
       >
-        {busy ? 'Working…' : 'Analyze image'}
+        {busy ? status ?? 'Working…' : 'Analyze image'}
       </button>
-      {status && <p className="text-sm">{status}</p>}
-      {result && (
-        <div className="rounded border p-4 space-y-2">
-          <p className="text-lg font-semibold">
-            Authenticity: {result.authenticity_score}/100
-          </p>
-          <ul className="space-y-1 text-sm">
+
+      {status && !busy && <p className="text-sm text-red-600">{status}</p>}
+
+      {result && v && (
+        <div className="space-y-5 rounded-2xl border border-zinc-200 p-6 dark:border-zinc-800">
+          <div className="flex items-center gap-5">
+            <div className="relative h-32 w-32 shrink-0">
+              <svg viewBox="0 0 128 128" className="h-32 w-32 -rotate-90">
+                <circle cx="64" cy="64" r={R} fill="none" stroke={v.track} strokeWidth="12" />
+                <circle
+                  cx="64"
+                  cy="64"
+                  r={R}
+                  fill="none"
+                  stroke={v.color}
+                  strokeWidth="12"
+                  strokeLinecap="round"
+                  strokeDasharray={C}
+                  strokeDashoffset={C * (1 - result.authenticity_score / 100)}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-3xl font-bold">{result.authenticity_score}</span>
+                <span className="text-xs text-zinc-500">/ 100</span>
+              </div>
+            </div>
+            <div>
+              <p className="text-lg font-semibold" style={{ color: v.color }}>
+                {v.label}
+              </p>
+              <p className="text-sm text-zinc-500">Authenticity estimate</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
             {result.signals.map((s) => (
-              <li key={s.name}>• {s.detail} (suspicion {s.suspicion})</li>
+              <div key={s.name} className="space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium">{prettyName(s.name)}</span>
+                  <span className="text-zinc-500">
+                    {Math.round(s.suspicion * 100)}% suspicion
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${s.suspicion * 100}%`, background: signalColor(s.suspicion) }}
+                  />
+                </div>
+                <p className="text-xs text-zinc-500">{s.detail}</p>
+              </div>
             ))}
-          </ul>
-          <p className="text-xs text-zinc-500">{result.disclaimer}</p>
+          </div>
+
+          <p className="border-t border-zinc-100 pt-3 text-xs text-zinc-400 dark:border-zinc-800">
+            {result.disclaimer}
+          </p>
         </div>
       )}
     </div>
