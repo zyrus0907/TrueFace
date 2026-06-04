@@ -12,17 +12,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# If this model fails to download, swap it for:
+#   "dima806/ai_vs_real_image_detection"
+AI_MODEL = "Organika/sdxl-detector"
+_classifier = None
+
+
+def get_classifier():
+    """Load the AI-image classifier once, lazily (first request only)."""
+    global _classifier
+    if _classifier is None:
+        from transformers import pipeline
+        _classifier = pipeline("image-classification", model=AI_MODEL)
+    return _classifier
+
 
 def error_level_analysis(img: Image.Image, quality: int = 90) -> float:
-    """Recompress and measure difference. Edited regions often differ more."""
     rgb = img.convert("RGB")
     buf = io.BytesIO()
     rgb.save(buf, "JPEG", quality=quality)
     buf.seek(0)
     recompressed = Image.open(buf)
     diff = ImageChops.difference(rgb, recompressed)
-    extrema = diff.getextrema()
-    return float(max(channel_max for _, channel_max in extrema))
+    return float(max(channel_max for _, channel_max in diff.getextrema()))
+
+
+def ai_generation_suspicion(img: Image.Image):
+    """Return (suspicion 0-1, note) or (None, reason) if unavailable."""
+    keywords = ("ai", "artificial", "fake", "generated", "synthetic", "sdxl")
+    try:
+        clf = get_classifier()
+        preds = clf(img.convert("RGB"))
+        for p in preds:
+            if any(k in p["label"].lower() for k in keywords):
+                return float(p["score"]), p["label"]
+        return 0.0, "no AI-class label matched"
+    except Exception as e:
+        return None, str(e)
 
 
 @app.get("/health")
@@ -38,7 +64,7 @@ async def analyze(file: UploadFile = File(...)):
     signals = []
     exif = img.getexif()
 
-    software = exif.get(305)  # 305 = Software tag
+    software = exif.get(305)
     signals.append({
         "name": "editing_software_tag",
         "detail": f"Metadata names software: {software}" if software
@@ -61,12 +87,20 @@ async def analyze(file: UploadFile = File(...)):
         "suspicion": round(min(ela_max / 255.0, 1.0), 2),
     })
 
+    ai_susp, note = ai_generation_suspicion(img)
+    if ai_susp is not None:
+        signals.append({
+            "name": "ai_generated_likelihood",
+            "detail": f"AI-image classifier confidence: {ai_susp * 100:.0f}% ({note}).",
+            "suspicion": round(ai_susp, 2),
+        })
+
     avg_suspicion = sum(s["suspicion"] for s in signals) / len(signals)
     authenticity_score = round((1 - avg_suspicion) * 100)
 
     return {
         "authenticity_score": authenticity_score,
         "signals": signals,
-        "disclaimer": "Heuristic estimate, not a definitive verdict. "
+        "disclaimer": "Heuristic + ML estimate, not a definitive verdict. "
                       "Can produce false positives; do not treat as proof.",
     }
