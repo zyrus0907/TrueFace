@@ -4,22 +4,29 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+const FEATURES = [
+  'Metadata & EXIF inspection',
+  'Error-level analysis (ELA)',
+  'AI-generation screening',
+]
+
 export default function LoginPage() {
   const router = useRouter()
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState<'signin' | 'signup' | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  async function handleAuth(mode: 'signin' | 'signup') {
-    setLoading(mode)
+  async function submit() {
+    setLoading(true)
     setError(null)
     const supabase = createClient()
     const { error } =
       mode === 'signin'
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password })
-    setLoading(null)
+    setLoading(false)
     if (error) {
       setError(error.message)
       return
@@ -29,104 +36,118 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#070710] px-4 text-zinc-100">
+    <main className="grid min-h-screen bg-white text-zinc-900 lg:grid-cols-2">
       <style>{`
-        @keyframes tfDrift1 { 0%,100%{transform:translate(-10%,-10%) scale(1)} 50%{transform:translate(10%,10%) scale(1.15)} }
-        @keyframes tfDrift2 { 0%,100%{transform:translate(10%,0) scale(1.1)} 50%{transform:translate(-10%,12%) scale(.95)} }
-        @keyframes tfFadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes tfScan { 0%{transform:scale(.8);opacity:.7} 100%{transform:scale(2.3);opacity:0} }
-        @keyframes tfFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-        @keyframes tfShimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
-        .tf-blob1{animation:tfDrift1 16s ease-in-out infinite}
-        .tf-blob2{animation:tfDrift2 20s ease-in-out infinite}
-        .tf-fade{animation:tfFadeUp .7s cubic-bezier(.2,.7,.2,1) both}
-        .tf-fade-2{animation:tfFadeUp .7s .12s cubic-bezier(.2,.7,.2,1) both}
-        .tf-scan{animation:tfScan 2.6s ease-out infinite}
-        .tf-scan-2{animation:tfScan 2.6s 1.3s ease-out infinite}
-        .tf-float{animation:tfFloat 5s ease-in-out infinite}
-        .tf-btn{background:linear-gradient(90deg,#6366f1,#8b5cf6,#6366f1);background-size:200% 100%;animation:tfShimmer 6s linear infinite}
-        @media (prefers-reduced-motion: reduce){.tf-blob1,.tf-blob2,.tf-fade,.tf-fade-2,.tf-scan,.tf-scan-2,.tf-float,.tf-btn{animation:none}}
+        @keyframes tfDrift { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(6%,-6%) scale(1.12)} }
+        @keyframes tfUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+        .tf-drift{animation:tfDrift 18s ease-in-out infinite}
+        .tf-up{animation:tfUp .7s cubic-bezier(.2,.7,.2,1) both}
+        .tf-up-1{animation:tfUp .7s .1s cubic-bezier(.2,.7,.2,1) both}
+        .tf-up-2{animation:tfUp .7s .2s cubic-bezier(.2,.7,.2,1) both}
+        @media (prefers-reduced-motion: reduce){.tf-drift,.tf-up,.tf-up-1,.tf-up-2{animation:none}}
       `}</style>
 
-      <div className="pointer-events-none absolute inset-0">
-        <div className="tf-blob1 absolute -left-40 top-0 h-[28rem] w-[28rem] rounded-full bg-indigo-600/25 blur-[110px]" />
-        <div className="tf-blob2 absolute -right-40 bottom-0 h-[26rem] w-[26rem] rounded-full bg-violet-600/20 blur-[110px]" />
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage:
-              'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
-            backgroundSize: '44px 44px',
-          }}
-        />
-      </div>
-
-      <div className="relative w-full max-w-sm">
-        <div className="tf-fade mb-8 flex flex-col items-center text-center">
-          <div className="tf-float relative mb-5">
-            <span className="tf-scan absolute inset-0 rounded-2xl border border-indigo-400/40" />
-            <span className="tf-scan-2 absolute inset-0 rounded-2xl border border-indigo-400/40" />
-            <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-600/40">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5z" />
-                <path d="m9 12 2 2 4-4" />
-              </svg>
-            </div>
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight">TrueFace</h1>
-          <p className="mt-1.5 text-sm text-zinc-400">Spot edited &amp; AI-altered photos in seconds.</p>
+      {/* Left — editorial brand panel */}
+      <section className="relative hidden flex-col justify-between overflow-hidden bg-zinc-950 p-12 text-white lg:flex">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="tf-drift absolute -left-20 top-10 h-96 w-96 rounded-full bg-indigo-600/30 blur-[120px]" />
+          <div className="tf-drift absolute -right-16 bottom-0 h-96 w-96 rounded-full bg-violet-600/20 blur-[120px]" style={{ animationDelay: '-9s' }} />
+          <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)', backgroundSize: '46px 46px' }} />
         </div>
 
-        <div className="tf-fade-2 rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl shadow-black/40 backdrop-blur-xl">
-          <div className="space-y-4">
+        <div className="tf-up relative flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5z" /><path d="m9 12 2 2 4-4" /></svg>
+          </div>
+          <span className="text-lg font-semibold tracking-tight">TrueFace</span>
+        </div>
+
+        <div className="tf-up-1 relative max-w-md">
+          <h1 className="text-[2.6rem] font-semibold leading-[1.1] tracking-tight">Know what&apos;s real.</h1>
+          <p className="mt-5 text-base leading-relaxed text-zinc-400">
+            Forensic image analysis that flags editing, manipulation, and AI generation — with reasons you can actually verify.
+          </p>
+        </div>
+
+        <ul className="tf-up-2 relative space-y-3.5">
+          {FEATURES.map((f) => (
+            <li key={f} className="flex items-center gap-3 text-sm text-zinc-300">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-300">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5L20 7" /></svg>
+              </span>
+              {f}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Right — auth form */}
+      <section className="flex items-center justify-center px-6 py-12">
+        <div className="tf-up w-full max-w-sm">
+          <div className="mb-10 flex items-center gap-2.5 lg:hidden">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5z" /><path d="m9 12 2 2 4-4" /></svg>
+            </div>
+            <span className="text-lg font-semibold tracking-tight">TrueFace</span>
+          </div>
+
+          <h2 className="text-2xl font-semibold tracking-tight">
+            {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+          </h2>
+          <p className="mt-1.5 text-sm text-zinc-500">
+            {mode === 'signin' ? 'Sign in to analyze your images.' : 'Start checking images in seconds.'}
+          </p>
+
+          <div className="mt-8 space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-400">Email</label>
+              <label className="text-sm font-medium text-zinc-700">Email</label>
               <input
                 type="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm outline-none transition placeholder:text-zinc-600 focus:border-indigo-400/60 focus:ring-4 focus:ring-indigo-500/15"
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/5"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-400">Password</label>
+              <label className="text-sm font-medium text-zinc-700">Password</label>
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm outline-none transition placeholder:text-zinc-600 focus:border-indigo-400/60 focus:ring-4 focus:ring-indigo-500/15"
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/5"
               />
             </div>
 
             {error && (
-              <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400 ring-1 ring-red-500/20">
-                {error}
-              </p>
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 ring-1 ring-red-100">{error}</p>
             )}
 
             <button
-              onClick={() => handleAuth('signin')}
-              disabled={loading !== null}
-              className="tf-btn w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 transition hover:brightness-110 disabled:opacity-50"
+              onClick={submit}
+              disabled={loading}
+              className="w-full rounded-lg bg-zinc-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
             >
-              {loading === 'signin' ? 'Signing in…' : 'Sign in'}
-            </button>
-            <button
-              onClick={() => handleAuth('signup')}
-              disabled={loading !== null}
-              className="w-full rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/[0.06] disabled:opacity-50"
-            >
-              {loading === 'signup' ? 'Creating account…' : 'Create account'}
+              {loading ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
             </button>
           </div>
-        </div>
 
-        <p className="tf-fade-2 mt-6 text-center text-xs text-zinc-600">
-          Authenticity estimates only — never definitive proof.
-        </p>
-      </div>
+          <p className="mt-6 text-center text-sm text-zinc-500">
+            {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
+            <button
+              onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null) }}
+              className="font-medium text-indigo-600 transition hover:text-indigo-700"
+            >
+              {mode === 'signin' ? 'Create one' : 'Sign in'}
+            </button>
+          </p>
+
+          <p className="mt-10 text-center text-xs text-zinc-400">
+            Authenticity estimates only — never definitive proof.
+          </p>
+        </div>
+      </section>
     </main>
   )
 }
